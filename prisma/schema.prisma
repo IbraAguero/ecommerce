@@ -39,7 +39,7 @@ model Category {
 model Product {
   id          String @id @default(uuid())
   name        String
-  slug        String
+  slug        String @unique
   description String
   images      String[]
   brand       String
@@ -59,6 +59,7 @@ model ProductVariant {
   productId   String
   size        String
   color       String
+  colorHex    String @default("#FFFF")
   stock       Int   @default(0)
   price       Float
   discountedPrice Float?
