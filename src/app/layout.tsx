@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import Navbar from "@/components/navbar";
+import { Toaster } from "@/components/ui/sonner";
+import Footer from "@/components/footer";
+import Providers from "@/components/providers";
 
 const poppins = Poppins({
   weight: ["200", "400", "500", "600", "800"],
@@ -18,10 +22,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${poppins.className} min-h-screen flex flex-col`}>
-        {children}
-      </body>
+    <html lang="es">
+      <Providers>
+        <body
+          className={`${poppins.className} min-h-screen flex flex-col dark`}
+        >
+          <Navbar />
+          {children}
+          <Toaster />
+          <Footer />
+        </body>
+      </Providers>
     </html>
   );
 }
