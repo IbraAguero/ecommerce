@@ -1,21 +1,41 @@
 "use server";
 
+import { uploadImage } from "@/lib/cloudinary";
 import { db } from "@/lib/db";
-import { Prisma } from "@prisma/client";
+import { productFormSchema, ProductType } from "@/schemas/product-schema";
+import { Prisma, ProductVariant } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 
 export const getProductBySlug = async (slug: string) => {
   try {
     const product = await db.product.findUnique({
       where: {
         slug: slug,
-        
       },
       include: { variants: true },
     });
 
     return product;
   } catch (error) {
-    console.log(error);
+    console.error(error);
+  }
+};
+
+export const getAllProducts = async () => {
+  try {
+    const products = await db.product.findMany({
+      include: { category: true, variants: true },
+    });
+    return {
+      success: true,
+      data: products,
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      success: false,
+      error: error,
+    };
   }
 };
 
@@ -201,6 +221,129 @@ export const getFilterPrice = async ({
     return {
       minPrice: 0,
       maxPrice: 0,
+    };
+  }
+};
+
+export const getVariantStock = async (variantId: string) => {
+  try {
+    const data = await db.productVariant.findUnique({
+      where: { id: variantId },
+      select: { stock: true },
+    });
+
+    if (!data) {
+      return null;
+    }
+
+    return data.stock;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
+export const addVariants = async (
+  productId: string,
+  variants: ProductVariant[]
+) => {
+  try {
+    const existingVariants = await db.productVariant.findMany({
+      where: { productId },
+    });
+
+    const updated = await Promise.all(
+      variants.map((variant) =>
+        variant.productId
+          ? db.productVariant.update({
+              where: { id: variant.id },
+              data: {
+                size: variant.size,
+                price: variant.price,
+                color: variant.color,
+                colorHex: variant.colorHex,
+                stock: variant.stock,
+              },
+            })
+          : db.productVariant.create({
+              data: {
+                productId,
+                size: variant.size,
+                price: variant.price,
+                color: variant.color,
+                colorHex: variant.colorHex,
+                stock: variant.stock,
+              },
+            })
+      )
+    );
+
+    const idsFromClient = variants.map((v) => v.id);
+    const variantsToDelete = existingVariants.filter(
+      (v) => !idsFromClient.includes(v.id)
+    );
+
+    if (variantsToDelete.length > 0) {
+      await db.productVariant.deleteMany({
+        where: { productId, id: { in: variantsToDelete.map((v) => v.id) } },
+      });
+    }
+
+    revalidatePath("/dashboard/productos");
+    console.log(updated);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+export const getCategories = async () => {
+  try {
+    return await db.category.findMany();
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+export const addProduct = async ({
+  product,
+  images,
+}: {
+  product: ProductType;
+  images: File[];
+}) => {
+  try {
+    const { data, success } = productFormSchema.safeParse(product);
+    if (!success) {
+      return { success: false, message: `Los datos son invalidos` };
+    }
+    console.log(data);
+
+    const uploadedImages = await Promise.all(
+      images.map((image) => uploadImage(image))
+    );
+
+    const validUrls = uploadedImages.filter(Boolean) as string[];
+
+    if (validUrls.length === 0) {
+      return { success: false, message: "Las imagenes son invalidas" };
+    }
+
+    const newProduct = await db.product.create({
+      data: {
+        ...data,
+        images: validUrls,
+        variants: { createMany: { data: data.variants } },
+      },
+    });
+
+    revalidatePath("/dashboard/productos");
+    return { success: true, data: newProduct };
+  } catch (error) {
+    console.error(error);
+    return {
+      success: false,
+      message: "Ocurrio un error al agregar",
+      error: error,
     };
   }
 };
